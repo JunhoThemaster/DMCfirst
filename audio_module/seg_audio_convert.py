@@ -4,30 +4,20 @@ import librosa
 import parselmouth
 import whisper
 import json
-from collections import Counter
 
 # ========== CONFIG ==========
 audio_path = "ckmk_a_bm_f_e_47109.wav"  # 분석 대상 wav
-model_size = "medium"
+model_size = "medium"     # whisper 모델 크기 (모델 을 낮출지 고려대상)
 THRESHOLD_SILENCE = 1.0   # 침묵 판단 기준 (초)
-TOP_DB = 30               # 음성 감지 기준 dB
-MIN_FREQUENT_WORD = 3
-MIN_WORD_LENGTH = 2
+TOP_DB = 30               # 음성 감지 기준 dB 30dB아래 소리는 침묵/잡음으로 판단
 
 # ========== LOAD ==========
-y, sr = librosa.load(audio_path, sr=None)
-duration = librosa.get_duration(y=y, sr=sr)
+y, sr = librosa.load(audio_path, sr=None)   # y에 오디오파일의 전체시간 동안의 진폭데이터를 저장 (1차원 배열로 이루어져잇음 )  ,sr은 samplelingrate 즉 1초동안 몇번 측정햇냐 (Hz단위)
+duration = librosa.get_duration(y=y, sr=sr)  #오디오 파일의 전체시간 (실수형)  len(y) / sr 로 계산 
 
 # ========== TRANSCRIBE ==========
-model = whisper.load_model(model_size)
+model = whisper.load_model(model_size)   #whisper 모델 
 result = model.transcribe(audio_path, language='ko', word_timestamps=True)
-transcript = result["text"].strip()
-
-# ========== HABIT WORD DETECTION ==========
-words = transcript.replace(".", "").replace(",", "").split()
-filtered_words = [w for w in words if len(w) >= MIN_WORD_LENGTH]
-word_counts = Counter(filtered_words)
-habit_words = {w: c for w, c in word_counts.items() if c >= MIN_FREQUENT_WORD}
 
 # ========== SILENCE GAP DETECTION ==========
 non_silence = librosa.effects.split(y, top_db=TOP_DB)
@@ -71,14 +61,6 @@ for i, seg in enumerate(result.get("segments", [])):
     seg_entry = {
         "id": i,
         "seek": seg.get("seek", 0),
-        "start": round(start, 2),
-        "end": round(end, 2),
-        "text": text,
-        "tokens": seg.get("tokens", []),
-        "temperature": seg.get("temperature", 0.0),
-        "avg_logprob": seg.get("avg_logprob", 0.0),
-        "compression_ratio": seg.get("compression_ratio", 0.0),
-        "no_speech_prob": seg.get("no_speech_prob", 0.0),
         "mean_pitch": round(mean_pitch, 1),
         "std_pitch": round(std_pitch, 1),
         "speed": speed,
@@ -88,8 +70,8 @@ for i, seg in enumerate(result.get("segments", [])):
     segments_output.append(seg_entry)
 
 # ========== SAVE ==========
-output_filename = os.path.splitext(os.path.basename(audio_path))[0] + "_segments_pitch.json"
+output_filename = os.path.splitext(os.path.basename(audio_path))[0] + "_sound_only_segments.json"
 with open(output_filename, "w", encoding="utf-8") as f:
     json.dump({"segments": segments_output}, f, ensure_ascii=False, indent=2)
 
-print(f"✅ Whisper segment + pitch 정보가 저장되었습니다:\n{output_filename}")
+print(f"✅ 음성 기반 피처만 추출 완료:\n{output_filename}")
